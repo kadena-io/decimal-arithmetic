@@ -51,6 +51,7 @@ module Numeric.Decimal.Arithmetic
 
        , raiseSignal
        , chargeArithOp
+       , chargeArithGas
        , clearFlags
 
          -- ** Traps
