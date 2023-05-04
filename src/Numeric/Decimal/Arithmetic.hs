@@ -96,7 +96,7 @@ data Context p r =
         -- ^ The context gas.
           , ctxGasLimit :: Word64
           -- ^ The context gas limit
-          , ctxChargeGas :: forall a b c d. GasArithOp a b c d -> Arith p r ()
+          , ctxChargeGas :: forall a b c d p' r'. GasArithOp a b c d -> Arith p' r' ()
           }
 
 data ArithBasicOp
