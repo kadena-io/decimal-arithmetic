@@ -206,9 +206,11 @@ evalArith (Arith e) = evalState (runExceptT e)
 -- re-raised within the current context.
 subArith :: Arith a b (Decimal a b) -> Arith p r (Decimal a b)
 subArith arith = do
-  gas <- gets ctxGas
-  gasLimit <- gets ctxGasLimit
-  let (g, ctx) = runArith arith newContext{ctxGas=gas, ctxGasLimit=gasLimit}
+  origCtx <- get
+  let gas = ctxGas origCtx
+      gasLimit = ctxGasLimit origCtx
+      chargeFn = ctxChargeGas origCtx
+  let (g, ctx) = runArith arith newContext{ctxGas=gas, ctxGasLimit=gasLimit, ctxChargeGas= chargeFn}
   modify' (\ctx' -> ctx'{ctxGas=ctxGas ctx})
   case g of
     Left e -> do
