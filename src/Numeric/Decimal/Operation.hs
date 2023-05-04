@@ -124,6 +124,8 @@ import Numeric.Decimal.Rounding
 
 import qualified Numeric.Decimal.Number as Number
 
+import Debug.Trace
+
 finitePrecision :: FinitePrecision p => Decimal p r -> Int
 finitePrecision n = let Just p = precision n in p
 
