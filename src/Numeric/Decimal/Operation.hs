@@ -750,18 +750,19 @@ powerSign x y
 integralPower :: (Precision p, Rounding r)
               => Decimal a b -> Integer -> Arith p r (Decimal p r)
 integralPower !b !e = do
+  traceM "In integral power"
   b' <- multiply b one
   evens b' e
   where
   evens :: (Precision p, Rounding r) => Decimal p r -> Integer -> Arith p r (Decimal p r)
   evens !x !y
     | even y = multiply x x >>= \x' -> evens x' (y `quot` 2)
-    | y == 1 = pure x
+    | y <= 1 = pure x
     | otherwise = multiply x x >>= \x' -> odds x' (y `quot` 2) x
   odds :: (Precision p, Rounding r) => Decimal p r -> Integer -> Decimal p r -> Arith p r (Decimal p r)
   odds !x !y !z
     | even y = multiply x x >>= \x' -> odds x' (y `quot` 2) z
-    | y == 1 = multiply x z
+    | y <= 1 = multiply x z
     | otherwise = do
       x' <- multiply x x
       z' <- multiply x z
