@@ -210,7 +210,7 @@ subArith arith = do
   let gas = ctxGas origCtx
       gasLimit = ctxGasLimit origCtx
       chargeFn = ctxChargeGas origCtx
-  let (g, ctx) = runArith arith newContext{ctxGas=gas, ctxGasLimit=gasLimit, ctxChargeGas= chargeFn}
+  let (g, ctx) = runArith arith newContext{ctxGas=gas, ctxGasLimit=gasLimit, ctxChargeGas=chargeFn}
   modify' (\ctx' -> ctx'{ctxGas=ctxGas ctx})
   case g of
     Left e -> do
@@ -308,8 +308,8 @@ chargeArithGas g = do
   gCurr <- gets ctxGas
   gLim <- gets ctxGasLimit
   let gNew = gCurr + g
-  when (gNew > gLim) $ throwError (Exception GasExceeded qNaN)
   modify' (\st -> st{ctxGas=gNew})
+  when (gNew > gLim) $ throwError (Exception GasExceeded qNaN)
 
 -- | Set the given signal flag in the context of the current arithmetic
 -- computation, and call the trap handler if the trap for this signal is
