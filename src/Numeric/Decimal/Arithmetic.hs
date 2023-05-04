@@ -72,6 +72,7 @@ import Data.Coerce (coerce)
 import Data.Monoid ((<>))
 import Data.Word(Word64)
 import GHC.Int(Int(..))
+import Debug.Trace
 
 import Numeric.Decimal.Number
 import Numeric.Decimal.Precision
@@ -305,9 +306,11 @@ chargeArithOp g = gets ctxChargeGas >>= ($ g)
 
 chargeArithGas :: Word64 -> Arith p r ()
 chargeArithGas g = do
+  traceM "In arith gas"
   gCurr <- gets ctxGas
   gLim <- gets ctxGasLimit
   let  gNew = gCurr + g
+  traceM $ "Curr accum gas" ++ show gNew
   modify' (\st -> st{ctxGas=gNew})
   when (gNew > gLim) $ throwError (Exception GasExceeded qNaN)
 
