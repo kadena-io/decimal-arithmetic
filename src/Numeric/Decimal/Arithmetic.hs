@@ -57,7 +57,7 @@ module Numeric.Decimal.Arithmetic
          -- ** Traps
        , TrapHandler
        , trap
-      
+
        , ArithBasicOp(..)
        , GasArithOp(..)
        ) where
@@ -93,7 +93,7 @@ data Context p r =
           , trapHandler  :: TrapHandler p r
           -- ^ The trap handler function for the context
           , ctxGas :: !Word64
-        -- ^ The context gas.  
+        -- ^ The context gas.
           , ctxGasLimit :: Word64
           -- ^ The context gas limit
           , ctxChargeGas :: forall a b c d. GasArithOp a b c d -> Arith p r ()
@@ -109,10 +109,15 @@ data GasArithOp a b c d
   = GasArithOp ArithBasicOp (Decimal a b) (Decimal c d)
   deriving Show
 
+defaultTrapHandler :: TrapHandler p r
+defaultTrapHandler e
+  | exceptionSignal e == GasExceeded = throwError e
+  | otherwise = return (exceptionResult e)
+
 -- | Return a new context with all signal flags cleared and all traps disabled.
 newContext :: Context p r
 newContext = Context { flags       = mempty
-                     , trapHandler = return . exceptionResult
+                     , trapHandler = defaultTrapHandler
                      , ctxGas = 0
                      , ctxGasLimit = 10_000_000
                      , ctxChargeGas = const (pure ())
@@ -206,7 +211,7 @@ subArith arith = do
   let (g, ctx) = runArith arith newContext{ctxGas=gas, ctxGasLimit=gasLimit}
   modify' (\ctx' -> ctx'{ctxGas=ctxGas ctx})
   case g of
-    Left e  -> do
+    Left e -> do
       let result = coerce (exceptionResult e)
       coerce <$> raiseSignal (exceptionSignal e) result
     Right r -> return r
@@ -294,11 +299,7 @@ signalMember :: Signal -> Signals -> Bool
 signalMember sig (Signals ss) = testBit ss (fromEnum sig)
 
 chargeArithOp :: GasArithOp a b c d -> Arith p r ()
-chargeArithOp (GasArithOp gt a b) =
-  case gt of
-    ArithAdd -> chargeArithGas 1
-    ArithMult -> chargeArithGas 1
-    ArithDiv -> chargeArithGas 1
+chargeArithOp g = gets ctxChargeGas >>= ($ g)
 
 chargeArithGas :: Word64 -> Arith p r ()
 chargeArithGas g = do
