@@ -307,7 +307,7 @@ chargeArithGas :: Word64 -> Arith p r ()
 chargeArithGas g = do
   gCurr <- gets ctxGas
   gLim <- gets ctxGasLimit
-  let gNew = gCurr + g
+  let  gNew = gCurr + g
   modify' (\st -> st{ctxGas=gNew})
   when (gNew > gLim) $ throwError (Exception GasExceeded qNaN)
 

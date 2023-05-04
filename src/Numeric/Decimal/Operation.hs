@@ -749,16 +749,46 @@ powerSign x y
 
 integralPower :: (Precision p, Rounding r)
               => Decimal a b -> Integer -> Arith p r (Decimal p r)
-integralPower b e = integralPower' (return b) e one
-  where integralPower' :: (Precision p, Rounding r)
-                       => Arith p r (Decimal a b) -> Integer -> Decimal p r
-                       -> Arith p r (Decimal p r)
-        integralPower' _  0 r = return r
-        integralPower' mb e r
-          | odd e     = mb >>= \b -> multiply r b >>=
-                        integralPower'              (multiply b b) e'
-          | otherwise = integralPower' (mb >>= \b -> multiply b b) e' r
-          where e' = e `div` 2
+integralPower b e = do
+  b' <- multiply b one
+  evens b' e
+  where
+  evens :: (Precision p, Rounding r) => Decimal p r -> Integer -> Arith p r (Decimal p r)
+  evens x y
+    | even y = multiply x x >>= \x' -> evens x' (y `quot` 2)
+    | y == 1 = pure x
+    | otherwise = multiply x x >>= \x' -> odds x' (y `quot` 2) x
+  odds :: (Precision p, Rounding r) => Decimal p r -> Integer -> Decimal p r -> Arith p r (Decimal p r)
+  odds x y z
+    | even y = multiply x x >>= \x' -> odds x' (y `quot` 2) z
+    | y == 1 = multiply x z
+    | otherwise = do
+      x' <- multiply x x
+      z' <- multiply x z
+      odds x' (y `quot` 2) (x * z)
+  -- intPow' x0 y0
+  --   | y0 < 0 = evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
+  --   | y0 == 0 = pure 1
+  --   | otherwise = evens x0 y0
+  -- evens x y
+  --   | even y = twoArgIntOpGas x x *> evens (x * x) (y `quot` 2)
+  --   | y == 1 = pure x
+  --   | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) x
+  -- odds x y z
+  --   | even y = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) z
+  --   | y == 1 = twoArgIntOpGas x z *> pure (x * z)
+  --   | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
+
+-- integralPower b e = integralPower' (return b) e one
+  -- where integralPower' :: (Precision p, Rounding r)
+  --                      => Arith p r (Decimal a b) -> Integer -> Decimal p r
+  --                      -> Arith p r (Decimal p r)
+  --       integralPower' 0 r = return r
+  --       integralPower' mb e r
+  --         | odd e     = mb >>= \b -> multiply r b >>=
+  --                       integralPower'              (multiply b b) e'
+  --         | otherwise = integralPower' (mb >>= \b -> multiply b b) e' r
+  --         where e' = e `div` 2
 
 inexactPower :: (FinitePrecision p, Rounding r)
              => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)

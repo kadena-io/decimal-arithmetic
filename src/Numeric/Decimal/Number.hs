@@ -95,9 +95,9 @@ type Payload     = Coefficient
 -- | A decimal floating point number with selectable precision and rounding
 -- algorithm
 data Decimal p r
-  = Num { sign        :: Sign
-        , coefficient :: Coefficient
-        , exponent    :: Exponent
+  = Num { sign        :: !Sign
+        , coefficient :: !Coefficient
+        , exponent    :: !Exponent
         }
   | Inf { sign        :: Sign
         }
