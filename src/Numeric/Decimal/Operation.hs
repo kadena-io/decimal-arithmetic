@@ -1,4 +1,6 @@
 
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {- | The operations described in the /General Decimal Arithmetic Specification/
 are provided here.
 
@@ -283,21 +285,22 @@ exp x@Num { sign = s, coefficient = c }
                 subRounded >>= result
   | otherwise = subArith (maclaurin x) >>= subRounded >>= result
 
-  where multiplyExact :: Decimal a b -> Decimal c d
-                      -> Arith PInfinite RoundHalfEven
-                         (Decimal PInfinite RoundHalfEven)
+  where multiplyExact :: (FinitePrecision p) => Decimal a b -> Decimal c d
+                      -> Arith p RoundHalfEven
+                         (Decimal p RoundHalfEven)
         multiplyExact = multiply
 
-        maclaurin :: FinitePrecision p => Decimal a b
+        maclaurin :: FinitePrecision p
+                  => Decimal a b
                   -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
         maclaurin x
           | adjustedExponent x >= 0 = subArith (subMaclaurin x) >>= subRounded
           | otherwise = sum one one one one
           where sum :: FinitePrecision p
                     => Decimal p RoundHalfEven
-                    -> Decimal PInfinite RoundHalfEven
-                    -> Decimal PInfinite RoundHalfEven
-                    -> Decimal PInfinite RoundHalfEven
+                    -> Decimal p RoundHalfEven
+                    -> Decimal p RoundHalfEven
+                    -> Decimal p RoundHalfEven
                     -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
                 sum s num den n = do
                   num' <- subArith (multiplyExact num x)
@@ -308,7 +311,7 @@ exp x@Num { sign = s, coefficient = c }
 
         subMaclaurin :: FinitePrecision p => Decimal a b
                      -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
-        subMaclaurin x = subArith (multiplyExact x oneHalf) >>= maclaurin >>=
+        subMaclaurin x = multiplyExact x oneHalf >>= maclaurin >>=
           \r -> multiply r r
 
         subRounded :: Precision p
@@ -371,11 +374,11 @@ ln x@Num { sign = s, coefficient = c, exponent = e }
   | s == Pos = if e <= 0 && c == 10^(-e) then return zero
                else subArith (subLn x) >>= subRounded >>= result
 
-  where subLn :: FinitePrecision p => Decimal a b
+  where subLn :: forall p a b. FinitePrecision p => Decimal a b
               -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
         subLn x = do
           let fe = fromIntegral (-(numDigits c - 1)) :: Exponent
-              r  = fromIntegral (e - fe) :: Decimal PInfinite RoundHalfEven
+              r  = fromIntegral (e - fe) :: Decimal p RoundHalfEven
           lnf <- taylorLn x { exponent = fe }
           add lnf =<< multiply r =<< ln10
 
@@ -405,7 +408,7 @@ taylorLn x = do
                        => Decimal p RoundHalfEven
                        -> Decimal p RoundHalfEven
                        -> Decimal p RoundHalfEven
-                       -> Decimal PInfinite RoundHalfEven
+                       -> Decimal p RoundHalfEven
                        -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
                   sum' s m b n = do
                     m' <- multiply m b
@@ -886,7 +889,7 @@ roundToIntegralValue x = coerce <$> generalRules1 x
 --
 -- Otherwise (the operand is equal to zero), the result will be the zero with
 -- the same sign as the operand and with the ideal exponent.
-squareRoot :: FinitePrecision p
+squareRoot :: (FinitePrecision p, Rounding r)
            => Decimal a b -> Arith p r (Decimal p RoundHalfEven)
 squareRoot n@Num { sign = s, coefficient = c, exponent = e }
   | c == 0   = return n { exponent = idealExp }
@@ -913,15 +916,15 @@ squareRoot n@Num { sign = s, coefficient = c, exponent = e }
                    => Decimal a b -> Arith p r (Decimal p RoundHalfEven)
         subRounded = subArith . roundDecimal
 
-        exactness :: Decimal a b -> Arith p r
+        exactness :: (Precision p, Rounding r) => Decimal a b -> Arith p r
                      (Either (Decimal p r) Ordering)
-        exactness r = subArith (multiply' r r) >>= compare n
-          where multiply' :: Decimal a b -> Decimal c d
-                          -> Arith PInfinite RoundHalfEven
-                             (Decimal PInfinite RoundHalfEven)
-                multiply' = multiply
+        exactness r = multiply r r >>= compare n
+          -- where multiply' :: Precision p => Decimal a b -> Decimal c d
+          --                 -> Arith p RoundHalfEven
+          --                    (Decimal p RoundHalfEven)
+          --       multiply' = multiply
 
-        result :: Decimal p a -> Arith p r (Decimal p a)
+        result :: (Precision p, Rounding r) => Decimal p a -> Arith p r (Decimal p a)
         result r = exactness r >>= \e -> case e of
           Right EQ -> return (reduced r)
           _ -> let r' = coerce r

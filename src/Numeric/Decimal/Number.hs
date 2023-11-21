@@ -1,4 +1,7 @@
 
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Numeric.Decimal.Number
        ( Sign(..)
        , negateSign
@@ -454,7 +457,7 @@ instance (FinitePrecision p, Rounding r) => Floating (Decimal p r) where
 
   x ** y = evalOp (x `Op.power` y)
 
-  sqrt = castRounding . evalOp . Op.squareRoot
+  sqrt = castRounding . evalOp . Op.squareRoot @p @r
 
   sin  = castDown . snd                . cordic . castUp
   cos  = castDown . fst                . cordic . castUp
