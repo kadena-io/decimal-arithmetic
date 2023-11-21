@@ -1,4 +1,6 @@
 
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {- | The operations described in the /General Decimal Arithmetic Specification/
 are provided here.
 
@@ -147,6 +149,8 @@ generalRules2 nan@NaN{} _                    = return (coerce nan)
 generalRules2 _         nan@NaN{}            = return (coerce nan)
 generalRules2 x         _                    = invalidOperation x
 
+
+
 -- $arithmetic-operations
 --
 -- This section describes the arithmetic operations on, and some other
@@ -160,9 +164,15 @@ generalRules2 x         _                    = invalidOperation x
 --
 -- The result is then rounded to /precision/ digits if necessary, counting
 -- from the most significant digit of the result.
+
 add :: (Precision p, Rounding r)
     => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
-add Num { sign = xs, coefficient = xc, exponent = xe }
+add a b = chargeArithOp (GasArithOp ArithAdd a b) *> add' a b
+
+
+add' :: (Precision p, Rounding r)
+    => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
+add' Num { sign = xs, coefficient = xc, exponent = xe }
     Num { sign = ys, coefficient = yc, exponent = ye } = sum
 
   where sum = result Num { sign = rs, coefficient = rc, exponent = re }
@@ -180,12 +190,12 @@ add Num { sign = xs, coefficient = xc, exponent = xe }
                    | otherwise = (xc, yc * 10^n)
           where n = Prelude.abs (xe - ye)
 
-add inf@Inf{} Num{} = return (coerce inf)
-add Num{} inf@Inf{} = return (coerce inf)
-add inf@Inf { sign = xs } Inf { sign = ys }
+add' inf@Inf{} Num{} = return (coerce inf)
+add' Num{} inf@Inf{} = return (coerce inf)
+add' inf@Inf { sign = xs } Inf { sign = ys }
   | xs == ys  = return (coerce inf)
   | otherwise = invalidOperation qNaN
-add x y = generalRules2 x y
+add' x y = generalRules2 x y
 
 -- | 'subtract' takes two operands. If either operand is a /special value/
 -- then the general rules apply.
@@ -220,6 +230,11 @@ minus x = zero { exponent = exponent x } `subtract` x
 plus :: (Precision p, Rounding r) => Decimal a b -> Arith p r (Decimal p r)
 plus x = zero { exponent = exponent x } `add` x
 
+
+multiply :: (Precision p, Rounding r)
+         => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
+multiply a b = chargeArithOp (GasArithOp ArithMult a b) *> multiply' a b
+
 -- | 'multiply' takes two operands. If either operand is a /special value/
 -- then the general rules apply. Otherwise, the operands are multiplied
 -- together (“long multiplication”), resulting in a number which may be as
@@ -227,9 +242,9 @@ plus x = zero { exponent = exponent x } `add` x
 --
 -- The result is then rounded to /precision/ digits if necessary, counting
 -- from the most significant digit of the result.
-multiply :: (Precision p, Rounding r)
+multiply' :: (Precision p, Rounding r)
          => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
-multiply Num { sign = xs, coefficient = xc, exponent = xe }
+multiply' Num { sign = xs, coefficient = xc, exponent = xe }
          Num { sign = ys, coefficient = yc, exponent = ye } = result rn
 
   where rn = Num { sign = rs, coefficient = rc, exponent = re }
@@ -237,15 +252,15 @@ multiply Num { sign = xs, coefficient = xc, exponent = xe }
         rc = xc * yc
         re = xe + ye
 
-multiply Inf { sign = xs } Inf { sign = ys } =
+multiply' Inf { sign = xs } Inf { sign = ys } =
   return Inf { sign = xorSigns xs ys }
-multiply Inf { sign = xs } Num { sign = ys, coefficient = yc }
+multiply' Inf { sign = xs } Num { sign = ys, coefficient = yc }
   | yc == 0   = invalidOperation qNaN
   | otherwise = return Inf { sign = xorSigns xs ys }
-multiply Num { sign = xs, coefficient = xc } Inf { sign = ys }
+multiply' Num { sign = xs, coefficient = xc } Inf { sign = ys }
   | xc == 0   = invalidOperation qNaN
   | otherwise = return Inf { sign = xorSigns xs ys }
-multiply x y = generalRules2 x y
+multiply' x y = generalRules2 x y
 
 -- | 'exp' takes one operand. If the operand is a NaN then the general rules
 -- for special values apply.
@@ -270,21 +285,22 @@ exp x@Num { sign = s, coefficient = c }
                 subRounded >>= result
   | otherwise = subArith (maclaurin x) >>= subRounded >>= result
 
-  where multiplyExact :: Decimal a b -> Decimal c d
-                      -> Arith PInfinite RoundHalfEven
-                         (Decimal PInfinite RoundHalfEven)
+  where multiplyExact :: (FinitePrecision p) => Decimal a b -> Decimal c d
+                      -> Arith p RoundHalfEven
+                         (Decimal p RoundHalfEven)
         multiplyExact = multiply
 
-        maclaurin :: FinitePrecision p => Decimal a b
+        maclaurin :: FinitePrecision p
+                  => Decimal a b
                   -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
         maclaurin x
           | adjustedExponent x >= 0 = subArith (subMaclaurin x) >>= subRounded
           | otherwise = sum one one one one
           where sum :: FinitePrecision p
                     => Decimal p RoundHalfEven
-                    -> Decimal PInfinite RoundHalfEven
-                    -> Decimal PInfinite RoundHalfEven
-                    -> Decimal PInfinite RoundHalfEven
+                    -> Decimal p RoundHalfEven
+                    -> Decimal p RoundHalfEven
+                    -> Decimal p RoundHalfEven
                     -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
                 sum s num den n = do
                   num' <- subArith (multiplyExact num x)
@@ -295,7 +311,7 @@ exp x@Num { sign = s, coefficient = c }
 
         subMaclaurin :: FinitePrecision p => Decimal a b
                      -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
-        subMaclaurin x = subArith (multiplyExact x oneHalf) >>= maclaurin >>=
+        subMaclaurin x = multiplyExact x oneHalf >>= maclaurin >>=
           \r -> multiply r r
 
         subRounded :: Precision p
@@ -358,11 +374,11 @@ ln x@Num { sign = s, coefficient = c, exponent = e }
   | s == Pos = if e <= 0 && c == 10^(-e) then return zero
                else subArith (subLn x) >>= subRounded >>= result
 
-  where subLn :: FinitePrecision p => Decimal a b
+  where subLn :: forall p a b. FinitePrecision p => Decimal a b
               -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
         subLn x = do
           let fe = fromIntegral (-(numDigits c - 1)) :: Exponent
-              r  = fromIntegral (e - fe) :: Decimal PInfinite RoundHalfEven
+              r  = fromIntegral (e - fe) :: Decimal p RoundHalfEven
           lnf <- taylorLn x { exponent = fe }
           add lnf =<< multiply r =<< ln10
 
@@ -392,7 +408,7 @@ taylorLn x = do
                        => Decimal p RoundHalfEven
                        -> Decimal p RoundHalfEven
                        -> Decimal p RoundHalfEven
-                       -> Decimal PInfinite RoundHalfEven
+                       -> Decimal p RoundHalfEven
                        -> Arith p RoundHalfEven (Decimal p RoundHalfEven)
                   sum' s m b n = do
                     m' <- multiply m b
@@ -454,6 +470,11 @@ log10 x@Num { sign = s, coefficient = c, exponent = e }
 log10 n@Inf { sign = Pos } = return (coerce n)
 log10 x = coerce <$> generalRules1 x
 
+
+divide :: (FinitePrecision p, Rounding r)
+       => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
+divide a b = chargeArithOp (GasArithOp ArithDiv a b) *> divide' a b
+
 -- | 'divide' takes two operands. If either operand is a /special value/ then
 -- the general rules apply.
 --
@@ -467,12 +488,12 @@ log10 x = coerce <$> generalRules1 x
 -- The result is then rounded to /precision/ digits, if necessary, according
 -- to the /rounding/ algorithm and taking into account the remainder from the
 -- division.
-divide :: (FinitePrecision p, Rounding r)
+divide' :: (FinitePrecision p, Rounding r)
        => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
-divide dividend@Num{ sign = xs } Num { coefficient = 0, sign = ys }
+divide' dividend@Num{ sign = xs } Num { coefficient = 0, sign = ys }
   | Number.isZero dividend = divisionUndefined
   | otherwise              = divisionByZero infinity { sign = xorSigns xs ys }
-divide Num { sign = xs, coefficient = xc, exponent = xe }
+divide' Num { sign = xs, coefficient = xc, exponent = xe }
        Num { sign = ys, coefficient = yc, exponent = ye } = quotient
 
   where quotient = result =<< answer
@@ -487,12 +508,12 @@ divide Num { sign = xs, coefficient = xc, exponent = xe }
               EQ -> rn { coefficient = rc * 10 + 5, exponent = re - 1 }
               GT -> rn { coefficient = rc * 10 + 9, exponent = re - 1 }
 
-divide Inf{} Inf{} = invalidOperation qNaN
-divide Inf { sign = xs } Num { sign = ys } =
+divide' Inf{} Inf{} = invalidOperation qNaN
+divide' Inf { sign = xs } Num { sign = ys } =
   return Inf { sign = xorSigns xs ys }
-divide Num { sign = xs } Inf { sign = ys } =
+divide' Num { sign = xs } Inf { sign = ys } =
   return zero { sign = xorSigns xs ys }
-divide x y = generalRules2 x y
+divide' x y = generalRules2 x y
 
 type Dividend  = Coefficient
 type Divisor   = Coefficient
@@ -868,7 +889,7 @@ roundToIntegralValue x = coerce <$> generalRules1 x
 --
 -- Otherwise (the operand is equal to zero), the result will be the zero with
 -- the same sign as the operand and with the ideal exponent.
-squareRoot :: FinitePrecision p
+squareRoot :: (FinitePrecision p, Rounding r)
            => Decimal a b -> Arith p r (Decimal p RoundHalfEven)
 squareRoot n@Num { sign = s, coefficient = c, exponent = e }
   | c == 0   = return n { exponent = idealExp }
@@ -895,15 +916,15 @@ squareRoot n@Num { sign = s, coefficient = c, exponent = e }
                    => Decimal a b -> Arith p r (Decimal p RoundHalfEven)
         subRounded = subArith . roundDecimal
 
-        exactness :: Decimal a b -> Arith p r
+        exactness :: (Precision p, Rounding r) => Decimal a b -> Arith p r
                      (Either (Decimal p r) Ordering)
-        exactness r = subArith (multiply' r r) >>= compare n
-          where multiply' :: Decimal a b -> Decimal c d
-                          -> Arith PInfinite RoundHalfEven
-                             (Decimal PInfinite RoundHalfEven)
-                multiply' = multiply
+        exactness r = multiply r r >>= compare n
+          -- where multiply' :: Precision p => Decimal a b -> Decimal c d
+          --                 -> Arith p RoundHalfEven
+          --                    (Decimal p RoundHalfEven)
+          --       multiply' = multiply
 
-        result :: Decimal p a -> Arith p r (Decimal p a)
+        result :: (Precision p, Rounding r) => Decimal p a -> Arith p r (Decimal p a)
         result r = exactness r >>= \e -> case e of
           Right EQ -> return (reduced r)
           _ -> let r' = coerce r

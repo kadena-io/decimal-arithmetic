@@ -56,7 +56,7 @@ min      :: Decimal a b -> Decimal a b -> Arith p r (Decimal a b)
 max      :: Decimal a b -> Decimal a b -> Arith p r (Decimal a b)
 power    :: (FinitePrecision p, Rounding r)
          => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
-squareRoot :: FinitePrecision p
+squareRoot :: (FinitePrecision p, Rounding r)
            => Decimal a b -> Arith p r (Decimal p RoundHalfEven)
 
 and    :: Precision p => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
