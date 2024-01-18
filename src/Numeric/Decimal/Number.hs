@@ -70,6 +70,7 @@ import {-# SOURCE #-} qualified Numeric.Decimal.Operation as Op
 import qualified GHC.Real
 import Data.Proxy
 import GHC.Base (word2Int#, int2Word#)
+import GHC.Exts (Word#)
 
 data Sign = Pos  -- ^ Positive or non-negative
           | Neg  -- ^ Negative
@@ -663,7 +664,7 @@ castRounding = coerce
 
 -- | Return the number of decimal digits of the argument.
 numDigits :: Coefficient -> Int
-numDigits n = I# (word2Int# (naturalSizeInBase# (int2Word# 10#) n))
+numDigits n = I# (word2Int# (naturalSizeInBase# 10## n))
   -- | x <         10 = 1
   -- | x <        100 = 2
   -- | x <       1000 = 3
