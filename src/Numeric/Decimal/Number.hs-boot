@@ -20,15 +20,15 @@ type Payload     = Coefficient
 
 type role Decimal phantom phantom
 data Decimal p r
-  = Num { sign        :: Sign
-        , coefficient :: Coefficient
-        , exponent    :: Exponent
+  = Num { sign        :: !Sign
+        , coefficient :: !Coefficient
+        , exponent    :: !Exponent
         }
-  | Inf { sign        :: Sign
+  | Inf { sign        :: !Sign
         }
-  | NaN { sign        :: Sign
-        , signaling   :: Bool
-        , payload     :: Payload
+  | NaN { sign        :: !Sign
+        , signaling   :: !Bool
+        , payload     :: !Payload
         }
 
 numDigits :: Coefficient -> Int

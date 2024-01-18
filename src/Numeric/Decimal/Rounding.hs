@@ -1,4 +1,8 @@
 
+{-# LANGUAGE Strict #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Numeric.Decimal.Rounding
        ( RoundingAlgorithm(..)
        , Rounding(rounding)
@@ -22,6 +26,7 @@ module Numeric.Decimal.Rounding
 import Prelude hiding (exponent)
 
 import Data.Coerce (coerce)
+import Data.Proxy
 
 import {-# SOURCE #-} Numeric.Decimal.Arithmetic
 import {-# SOURCE #-} Numeric.Decimal.Exception
@@ -42,25 +47,25 @@ data RoundingAlgorithm = RoundDown
 -- | A rounding algorithm to use when the result of an arithmetic operation
 -- exceeds the precision of the result type
 class Rounding r where
-  rounding         :: r -> RoundingAlgorithm
-  roundCoefficient :: r -> Rounder
+  rounding         :: Proxy r -> RoundingAlgorithm
+  roundCoefficient :: Proxy r -> Rounder
 
 type Remainder = Coefficient
 type Divisor   = Coefficient
 
 type Rounder = Sign -> Remainder -> Divisor -> Coefficient -> Coefficient
 
-getRounder :: Rounding r => Arith p r Rounder
-getRounder = ($ undefined) <$> getRounder'
-  where getRounder' :: Rounding r => Arith p r (r -> Rounder)
-        getRounder' = return roundCoefficient
+getRounder :: forall r p. Rounding r => Arith p r Rounder
+getRounder = return $ roundCoefficient (Proxy @r)
+  -- where getRounder' :: Rounding r => Arith p r (r -> Rounder)
+  --       getRounder' = return (roundCoefficient
 
 -- | Round a 'Decimal' to the precision of the arithmetic context using the
 -- rounding mode of the arithmetic context.
-roundDecimal :: (Precision p, Rounding r)
+roundDecimal :: forall p r a b. (Precision p, Rounding r)
              => Decimal a b -> Arith p r (Decimal p r)
-roundDecimal n@Num { sign = s, coefficient = c, exponent = e } = do
-  p <- getPrecision
+roundDecimal n@Num { sign = s, coefficient = !c, exponent = e } = do
+  let p = precision @p Proxy
   case excessDigits c =<< p of
     Just d -> do
       rounder <- getRounder
@@ -77,7 +82,7 @@ roundDecimal n@Num { sign = s, coefficient = c, exponent = e } = do
     Nothing -> return (coerce n)
 
 roundDecimal n@NaN { payload = p } = do
-  prec <- getPrecision
+  let prec = precision @p Proxy
   case excessDigits p =<< (pred <$> prec) of
     Just _  -> return n { payload = 0 }
     Nothing -> return (coerce n)

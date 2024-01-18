@@ -1,4 +1,6 @@
 
+{-# LANGUAGE Strict #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -55,6 +57,8 @@ import Data.Coerce (coerce)
 import Data.Ratio (numerator, denominator, (%))
 import Numeric.Natural (Natural)
 import Text.ParserCombinators.ReadP (readP_to_S)
+import GHC.Num.Natural
+import GHC.Int(Int(..))
 
 import {-# SOURCE #-} Numeric.Decimal.Arithmetic
 import {-# SOURCE #-} Numeric.Decimal.Conversion
@@ -64,6 +68,8 @@ import                Numeric.Decimal.Rounding
 import {-# SOURCE #-} qualified Numeric.Decimal.Operation as Op
 
 import qualified GHC.Real
+import Data.Proxy
+import GHC.Base (word2Int#, int2Word#)
 
 data Sign = Pos  -- ^ Positive or non-negative
           | Neg  -- ^ Negative
@@ -133,13 +139,13 @@ instance (Precision p, Rounding r) => Read (Decimal p r) where
                     | (n, s) <- readParen False
                       (readP_to_S toNumber . dropWhile isSpace) str ]
 
-decimalPrecision :: Decimal p r -> p
-decimalPrecision = undefined
+-- decimalPrecision :: Decimal p r -> p
+-- decimalPrecision = undefined
 
 instance Precision p => Precision (Decimal p r) where
-  precision = precision . decimalPrecision
-  eMax      = eMax      . decimalPrecision
-  eMin      = eMin      . decimalPrecision
+  precision _ = precision (Proxy @p)
+  eMax _ = eMax (Proxy @p)
+  eMin _ = eMin (Proxy @p)
 
 -- This assumes the arithmetic operation does not trap any signals, which
 -- could result in an exception being thrown (and returned in a Left value).
@@ -362,11 +368,11 @@ machinPi = castDown' $ 16 * arctan' (1 % 5) - 4 * arctan' (1 % 239)
 -- | Compute π to maximum precision using a generalized continued fraction
 -- that converges linearly, adding at least three decimal digits of precision
 -- per four terms.
-cfPi :: FinitePrecision p => ExtendedDecimal p
+cfPi :: forall p. FinitePrecision p => ExtendedDecimal p
 cfPi = pi'
   where pi'    = continuedFraction m
                  0 $ (4, 1) : [ (n * n, n * 2 + 1) | n <- [1..] ]
-        Just p = precision pi'
+        p = finitePrecision (Proxy @p)
         m      = (p `div` 3) * 4
 
 -- | Precomputed π to a precision of 50 digits
@@ -383,7 +389,7 @@ quarterPi = castDown' $ pi * oneQuarter
 
 -- | Compute (cos 𝛽, sin 𝛽) to maximum precision using Volder's algorithm
 -- (CORDIC).
-cordic :: FinitePrecision p
+cordic :: forall p. FinitePrecision p
        => ExtendedDecimal p -> (ExtendedDecimal p, ExtendedDecimal p)
 cordic beta@Num{}
   | beta >          halfPi = negatePair $ cordic (beta - pi)
@@ -411,7 +417,7 @@ cordic beta@Num{}
         -- K(n) = prod {i=0..n-1} 1 / sqrt (1 + 2^(-2 * i))
         k | p <= 50   = fastK
           | otherwise = seriesK
-          where Just p  = precision k
+          where Just p  = precision (Proxy @p)
                 fastK   = 0.60725293500888125616944675250492826311239085215009
                 seriesK = infiniteSeries (*)
                   [ recip $ sqrt (one + x) | x <- iterate (* oneQuarter) one ]
@@ -441,7 +447,7 @@ instance (FinitePrecision p, Rounding r) => Floating (Decimal p r) where
   pi = castRounding pi'
     where pi' | p <= 50   = fastPi
               | otherwise = cfPi
-          Just p = precision pi'
+          p = finitePrecision (Proxy @p)
 
   exp = castRounding . evalOp . Op.exp
   log = castRounding . evalOp . Op.ln
@@ -492,9 +498,9 @@ instance (FinitePrecision p, Rounding r) => Floating (Decimal p r) where
 
 instance (FinitePrecision p, Rounding r) => RealFloat (Decimal p r) where
   floatRadix  _ = 10
-  floatDigits x = let Just p = precision x in p
-  floatRange  x = let Just emin = eMin x
-                      Just emax = eMax x
+  floatDigits x = let Just p = precision (Proxy @p) in p
+  floatRange  x = let Just emin = eMin (Proxy @p)
+                      Just emax = eMax (Proxy @p)
                   in (fromIntegral emin, fromIntegral emax)
 
   decodeFloat x = case x of
@@ -567,7 +573,7 @@ instance FinitePrecision p => Bits (Decimal p r) where
     | i >= 0 && i < finiteBitSize x = (c `quot` 10 ^ i) `rem` 10 == 1
   testBit _ _ = False
 
-  bitSizeMaybe = precision
+  bitSizeMaybe _ = precision (Proxy @p)
   bitSize      = finiteBitSize
 
   isSigned _ = False
@@ -583,7 +589,8 @@ instance FinitePrecision p => Bits (Decimal p r) where
   popCount _ = 0
 
 instance FinitePrecision p => FiniteBits (Decimal p r) where
-  finiteBitSize x = let Just p = precision x in p
+  finiteBitSize x =
+    let p = finitePrecision (Proxy @p) in p
 
 instance NFData (Decimal p r) where
   rnf Num { sign = s, coefficient = c, exponent = e } =
@@ -656,20 +663,20 @@ castRounding = coerce
 
 -- | Return the number of decimal digits of the argument.
 numDigits :: Coefficient -> Int
-numDigits x
-  | x <         10 = 1
-  | x <        100 = 2
-  | x <       1000 = 3
-  | x <      10000 = 4
-  | x <     100000 = 5
-  | x <    1000000 = 6
-  | x <   10000000 = 7
-  | x <  100000000 = 8
-  | x < 1000000000 = 9
-  | otherwise      = 9 + numDigits (x `quot` 1000000000)
+numDigits n = I# (word2Int# (naturalSizeInBase# (int2Word# 10#) n))
+  -- | x <         10 = 1
+  -- | x <        100 = 2
+  -- | x <       1000 = 3
+  -- | x <      10000 = 4
+  -- | x <     100000 = 5
+  -- | x <    1000000 = 6
+  -- | x <   10000000 = 7
+  -- | x <  100000000 = 8
+  -- | x < 1000000000 = 9
+  -- | otherwise      = 9 + numDigits (x `quot` 1000000000)
 
-maxCoefficient :: Precision p => p -> Maybe Coefficient
-maxCoefficient p = (\d -> 10 ^ d - 1) <$> precision p
+maxCoefficient :: forall p. Precision p => p -> Maybe Coefficient
+maxCoefficient p = (\d -> 10 ^ d - 1) <$> precision (Proxy @p)
 
 -- | Is the sign of the given 'Decimal' positive?
 isPositive :: Decimal p r -> Bool
@@ -694,15 +701,15 @@ isZero Num { coefficient = 0 } = True
 isZero _                       = False
 
 -- | Is the given 'Decimal' normal?
-isNormal :: Precision p => Decimal p r -> Bool
+isNormal :: forall p r. Precision p => Decimal p r -> Bool
 isNormal n
-  | isFinite n && not (isZero n) = maybe True (adjustedExponent n >=) (eMin n)
+  | isFinite n && not (isZero n) = maybe True (adjustedExponent n >=) (eMin (Proxy @p))
   | otherwise                    = False
 
 -- | Is the given 'Decimal' subnormal?
-isSubnormal :: Precision p => Decimal p r -> Bool
+isSubnormal :: forall p r. Precision p => Decimal p r -> Bool
 isSubnormal n
-  | isFinite n && not (isZero n) = maybe False (adjustedExponent n <) (eMin n)
+  | isFinite n && not (isZero n) = maybe False (adjustedExponent n <) (eMin (Proxy @p))
   | otherwise                    = False
 
 -- | Return @0@ or @1@ if the argument is 'False' or 'True', respectively.
@@ -728,12 +735,12 @@ fromOrdering EQ = zero
 fromOrdering GT = one
 
 -- | Upper limit on the absolute value of the exponent
-eLimit :: Precision p => p -> Maybe Exponent
-eLimit = eMax -- ?
+eLimit :: forall p. Precision p => p -> Maybe Exponent
+eLimit _ = eMax @p Proxy
 
 -- | Minimum value of the exponent for subnormal results
-eTiny :: Precision p => p -> Maybe Exponent
-eTiny n = (-) <$> eMin n <*> (fromIntegral . subtract 1 <$> precision n)
+eTiny :: forall p. Precision p => p -> Maybe Exponent
+eTiny n = (-) <$> eMin @p Proxy <*> (fromIntegral . subtract 1 <$> precision @p Proxy)
 
 -- | Range of permissible exponent values
 eRange :: Precision p => Decimal p r -> Maybe (Exponent, Exponent)

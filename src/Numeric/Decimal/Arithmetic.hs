@@ -2,6 +2,8 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, NumericUnderscores, BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 
 -- | It is not usually necessary to import this module unless you want to use
@@ -76,6 +78,7 @@ import GHC.Int(Int(..))
 import Numeric.Decimal.Number
 import Numeric.Decimal.Precision
 import Numeric.Decimal.Rounding
+import Data.Proxy
 
 -- $decimal-arithmetic
 --
@@ -220,16 +223,12 @@ subArith arith = do
 
 -- | Return the precision of the arithmetic context (or 'Nothing' if the
 -- precision is infinite).
-getPrecision :: Precision p => Arith p r (Maybe Int)
-getPrecision = getPrecision' undefined
-  where getPrecision' :: Precision p => p -> Arith p r (Maybe Int)
-        getPrecision' = return . precision
+getPrecision :: forall p r. Precision p => Arith p r (Maybe Int)
+getPrecision = return (precision (Proxy @p))
 
 -- | Return the rounding mode of the arithmetic context.
-getRounding :: Rounding r => Arith p r RoundingAlgorithm
-getRounding = getRounding' undefined
-  where getRounding' :: Rounding r => r -> Arith p r RoundingAlgorithm
-        getRounding' = return . rounding
+getRounding :: forall p r. Rounding r => Arith p r RoundingAlgorithm
+getRounding = return (rounding (Proxy @r))
 
 -- $exceptional-conditions
 --

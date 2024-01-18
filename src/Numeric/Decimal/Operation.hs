@@ -1,5 +1,7 @@
 
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {- | The operations described in the /General Decimal Arithmetic Specification/
 are provided here.
@@ -125,14 +127,10 @@ import Numeric.Decimal.Precision
 import Numeric.Decimal.Rounding
 
 import qualified Numeric.Decimal.Number as Number
+import Data.Proxy
 
-finitePrecision :: FinitePrecision p => Decimal p r -> Int
-finitePrecision n = let Just p = precision n in p
-
-roundingAlg :: Rounding r => Arith p r a -> RoundingAlgorithm
-roundingAlg = rounding . arithRounding
-  where arithRounding :: Arith p r a -> r
-        arithRounding = undefined
+roundingAlg :: forall p r a. Rounding r => Arith p r a -> RoundingAlgorithm
+roundingAlg _ = rounding (Proxy @r)
 
 result :: (Precision p, Rounding r) => Decimal p r -> Arith p r (Decimal p r)
 result = roundDecimal  -- ...
@@ -416,9 +414,10 @@ taylorLn x = do
                     s' <- add s =<< divide m' n'
                     if s' == s then return s' else sum' s' m' b n'
 
-ln10 :: FinitePrecision p => Arith p r (Decimal p RoundHalfEven)
-ln10 = getPrecision >>= \(Just p) ->
-  if p <= 50 then return fastLn10 else slowLn10
+ln10 :: forall p r. FinitePrecision p => Arith p r (Decimal p RoundHalfEven)
+ln10 =
+  let p = finitePrecision @p Proxy
+  in if p <= 50 then return fastLn10 else slowLn10
 
   where fastLn10 :: FinitePrecision p => Decimal p RoundHalfEven
         fastLn10 = 2.3025850929940456840179914546843642076011014886288
@@ -488,7 +487,7 @@ divide a b = chargeArithOp (GasArithOp ArithDiv a b) *> divide' a b
 -- The result is then rounded to /precision/ digits, if necessary, according
 -- to the /rounding/ algorithm and taking into account the remainder from the
 -- division.
-divide' :: (FinitePrecision p, Rounding r)
+divide' :: forall p r a b c d. (FinitePrecision p, Rounding r)
        => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
 divide' dividend@Num{ sign = xs } Num { coefficient = 0, sign = ys }
   | Number.isZero dividend = divisionUndefined
@@ -499,7 +498,7 @@ divide' Num { sign = xs, coefficient = xc, exponent = xe }
   where quotient = result =<< answer
         rn = Num { sign = rs, coefficient = rc, exponent = re }
         rs = xorSigns xs ys
-        (rc, rem, dv, adjust) = longDivision xc yc (finitePrecision rn)
+        (rc, rem, dv, adjust) = longDivision xc yc (finitePrecision (Proxy @p))
         re = xe - (ye + adjust)
         answer
           | rem == 0  = return rn
@@ -1047,10 +1046,11 @@ xor x y = generalRules2 x y
 -- result is the digit-wise /inversion/ of the operand; each digit of the
 -- result is the inverse of the corresponding digit of the operand. A result
 -- digit is 1 if the corresponding operand digit is 0; otherwise it is 0.
-invert :: FinitePrecision p => Decimal a b -> Arith p r (Decimal p r)
+invert :: forall p a b r. FinitePrecision p => Decimal a b -> Arith p r (Decimal p r)
 invert x@Num{} = case toLogical x of
-  Just lx -> getPrecision >>= \(Just p) ->
-    let z = Logical { bits = complement (bits lx), bitLength = p }
+  Just lx ->
+    let !p = finitePrecision @p Proxy
+        z = Logical { bits = complement (bits lx), bitLength = p }
     in return (fromLogical z)
   _ -> invalidOperation qNaN
 invert x = generalRules1 x
@@ -1327,9 +1327,9 @@ validScale _                    = False
 -- | 'radix' takes no operands. The result is the radix (base) in which
 -- arithmetic is effected; for this specification the result will have the
 -- value 10.
-radix :: Precision p => Arith p r (Decimal p r)
+radix :: forall p r. Precision p => Arith p r (Decimal p r)
 radix = return radix'
-  where radix' = case precision radix' of
+  where radix' = case precision @p Proxy of
           Just 1 -> one { exponent    =  1 }
           _      -> one { coefficient = 10 }
 
@@ -1364,10 +1364,10 @@ sameQuantum _                     _                     = return False
 --
 -- The 'rotate' operation can be used to rotate rather than shift a
 -- coefficient.
-shift :: Precision p => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
+shift :: forall p a b c d r. Precision p => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
 shift n@Num { coefficient = c } s@Num { sign = d, coefficient = sc }
-  | validShift z s = return z
-  where z = case precision z of
+  | validShift (z :: Decimal p r) s = return z
+  where z = case precision @p Proxy of
           Just p  -> y { coefficient = coefficient y `rem` 10 ^ p }
           Nothing -> y
         y = case d of
@@ -1381,9 +1381,9 @@ shift n@NaN { signaling = False } s | validShift z s = return z
 shift n@NaN { signaling = True  } _                  = invalidOperation n
 shift _                           s                  = invalidOperation s
 
-validShift :: Precision p => p -> Decimal a b -> Bool
+validShift :: forall p a b. Precision p => p -> Decimal a b -> Bool
 validShift px Num { coefficient = c, exponent = 0 } =
-  let p = fromIntegral <$> precision px in maybe True (c <=) p
+  let p = fromIntegral <$> precision @p Proxy in maybe True (c <=) p
 validShift _ _ = False
 
 -- | 'rotate' takes two operands. The second operand must be an integer (with
@@ -1409,16 +1409,17 @@ validShift _ _ = False
 --
 -- The 'shift' operation can be used to shift rather than rotate a
 -- coefficient.
-rotate :: FinitePrecision p
+rotate :: forall p a b c d r. FinitePrecision p
        => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
 rotate n@Num { coefficient = c } s@Num { sign = d, coefficient = sc }
   | validShift z s = return z
-  where z = n { coefficient = rc * b + (lc `rem` b) }
+  where z :: Decimal p r
+        z = n { coefficient = rc * b + (lc `rem` b) }
         (lc, rc) = c `quotRem` b'
         (b , b') = case d of
           Pos -> (10^sc , 10^sc')
           Neg -> (10^sc', 10^sc )
-        sc' = finitePrecision z - fromIntegral sc
+        sc' = finitePrecision (Proxy @p) - fromIntegral sc
 
 rotate n@Inf {                   } s | validShift z s = return z
   where z = coerce n
