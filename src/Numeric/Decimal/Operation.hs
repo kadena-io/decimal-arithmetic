@@ -165,7 +165,8 @@ generalRules2 x         _                    = invalidOperation x
 
 add :: (Precision p, Rounding r)
     => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
-add a b = chargeArithOp (GasArithOp ArithAdd a b) *> add' a b
+add = add'
+  -- chargeArithOp (GasArithOp ArithAdd a b) *> add' a b
 
 
 add' :: (Precision p, Rounding r)
@@ -231,7 +232,8 @@ plus x = zero { exponent = exponent x } `add` x
 
 multiply :: (Precision p, Rounding r)
          => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
-multiply a b = chargeArithOp (GasArithOp ArithMult a b) *> multiply' a b
+multiply a b = multiply' a b
+  -- chargeArithOp (GasArithOp ArithMult a b) *> multiply' a b
 
 -- | 'multiply' takes two operands. If either operand is a /special value/
 -- then the general rules apply. Otherwise, the operands are multiplied
@@ -472,7 +474,8 @@ log10 x = coerce <$> generalRules1 x
 
 divide :: (FinitePrecision p, Rounding r)
        => Decimal a b -> Decimal c d -> Arith p r (Decimal p r)
-divide a b = chargeArithOp (GasArithOp ArithDiv a b) *> divide' a b
+divide a b = divide' a b
+  -- chargeArithOp (GasArithOp ArithDiv a b) *> divide' a b
 
 -- | 'divide' takes two operands. If either operand is a /special value/ then
 -- the general rules apply.
